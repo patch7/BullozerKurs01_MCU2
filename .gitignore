@@ -30,3 +30,8 @@
 *.exe
 *.out
 *.app
+/BullozerKurs01_MCU2.dep
+/BullozerKurs01_MCU2.ewd
+/BullozerKurs01_MCU2.ewp
+/BullozerKurs01_MCU2.ewt
+/BullozerKurs01_MCU2.eww
