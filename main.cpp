@@ -35,7 +35,7 @@
 #define HUNDRED_MS     (time_flag[3])
 
 static uint32_t time_ms       = 0;
-static uint16_t ADCConvertedValue[19] = {0};
+static uint16_t ADCConvertedValue[32] = {0};
 
 void MaxAllRccBusConfig(void);
 void DMAforADCInit(void);
@@ -44,6 +44,8 @@ void CANInit(void);
 void TIM_PWMInit(void);
 void TimerInit(void);
 void FlashInit(void);
+void SPIInit(void);
+void DMAforSPIInit(void);
 void DigitalInit(void);
 
 bool time_flag[4] = {false};
@@ -120,6 +122,8 @@ void main()
   RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOI, ENABLE);
   
   CANInit();
+  DMAforSPIInit();
+  SPIInit();
   DMAforADCInit();
   ADCInputInit();
   TIM_PWMInit();
@@ -165,6 +169,69 @@ void FlashInit()
 {
   FLASH_PrefetchBufferCmd(ENABLE);
   FLASH_SetLatency(FLASH_Latency_5);
+}
+void DMAforSPIInit()
+{
+  DMA_DeInit(DMA1_Stream0);//SPI3_Rx
+  DMA_DeInit(DMA1_Stream5);//SPI3_Tx
+  RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_DMA1, ENABLE);
+
+  DMA_InitTypeDef DMA_InitStruct;
+  DMA_StructInit(&DMA_InitStruct);
+  DMA_InitStruct.DMA_Channel            = DMA_Channel_0;
+  DMA_InitStruct.DMA_PeripheralBaseAddr = (uint32_t)&(SPI3->DR);
+  DMA_InitStruct.DMA_Memory0BaseAddr    = (uint32_t)(ADCConvertedValue + 24);
+  DMA_InitStruct.DMA_BufferSize         = 2;
+  DMA_InitStruct.DMA_MemoryInc          = DMA_MemoryInc_Enable;
+  DMA_Init(DMA1_Stream0, &DMA_InitStruct);
+  
+  DMA_InitStruct.DMA_Memory0BaseAddr    = (uint32_t)(ADCConvertedValue + 16);
+  DMA_InitStruct.DMA_DIR                = DMA_DIR_MemoryToPeripheral;
+  DMA_Init(DMA1_Stream5, &DMA_InitStruct);
+
+  DMA_ITConfig(DMA1_Stream0, DMA_IT_TC, ENABLE);
+  DMA_ITConfig(DMA1_Stream5, DMA_IT_TC, ENABLE);
+
+  NVIC_InitTypeDef NVIC_InitStruct;
+  NVIC_InitStruct.NVIC_IRQChannel                   = DMA1_Stream0_IRQn;
+  NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = 0x0;
+  NVIC_InitStruct.NVIC_IRQChannelSubPriority        = 0x0;
+  NVIC_InitStruct.NVIC_IRQChannelCmd                = ENABLE;
+  NVIC_Init(&NVIC_InitStruct);
+  
+  NVIC_InitStruct.NVIC_IRQChannel                   = DMA1_Stream5_IRQn;
+  NVIC_Init(&NVIC_InitStruct);
+
+  DMA_Cmd(DMA1_Stream0, ENABLE);
+  DMA_Cmd(DMA1_Stream5, ENABLE);
+}
+void SPIInit()
+{
+  SPI_I2S_DeInit(SPI3);
+  RCC_APB1PeriphClockCmd(RCC_APB1Periph_SPI3, ENABLE);
+
+  GPIO_InitTypeDef GPIO_InitStruct;
+  GPIO_StructInit(&GPIO_InitStruct);
+  GPIO_InitStruct.GPIO_Pin   = GPIO_Pin_10 | GPIO_Pin_11 | GPIO_Pin_12;
+  GPIO_InitStruct.GPIO_Mode  = GPIO_Mode_AF;
+  GPIO_InitStruct.GPIO_Speed = GPIO_High_Speed;
+  GPIO_InitStruct.GPIO_PuPd  = GPIO_PuPd_DOWN;
+  GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  GPIO_PinAFConfig(GPIOC, GPIO_PinSource10, GPIO_AF_SPI3);
+  GPIO_PinAFConfig(GPIOC, GPIO_PinSource11, GPIO_AF_SPI3);
+  GPIO_PinAFConfig(GPIOC, GPIO_PinSource12, GPIO_AF_SPI3);
+ 
+  SPI_InitTypeDef SPI_InitStruct;
+  SPI_StructInit(&SPI_InitStruct);
+  SPI_InitStruct.SPI_Mode     = SPI_Mode_Master;
+  SPI_InitStruct.SPI_DataSize = SPI_DataSize_16b;
+  SPI_InitStruct.SPI_NSS      = SPI_NSS_Soft | SPI_NSSInternalSoft_Set;
+  SPI_Init(SPI3, &SPI_InitStruct);
+
+  SPI_I2S_DMACmd(SPI3, SPI_I2S_DMAReq_Rx | SPI_I2S_DMAReq_Tx, ENABLE);
+
+  SPI_Cmd(SPI3, ENABLE);
 }
 //Настраиваем модуль DMA2 для автоматической обработки каналов ADC1 и ADC3
 void DMAforADCInit()
@@ -468,6 +535,26 @@ extern "C"
   {
     if(DMA_GetITStatus(DMA2_Stream1, DMA_IT_TCIF1))
       DMA_ClearITPendingBit(DMA2_Stream1, DMA_IT_TCIF1);
+  }
+  void DMA1_Stream0_IRQHandler()
+  {
+    if(DMA_GetITStatus(DMA1_Stream0, DMA_IT_TCIF0))//Rx
+    {
+      DMA_ClearITPendingBit(DMA1_Stream0, DMA_IT_TCIF0);
+      //DMA_Cmd(DMA1_Stream0, DISABLE);
+    }
+  }
+  void DMA1_Stream5_IRQHandler()
+  {
+    if(DMA_GetITStatus(DMA1_Stream5, DMA_IT_TCIF5))//Tx
+    {
+      DMA_ClearITPendingBit(DMA1_Stream5, DMA_IT_TCIF5);
+
+      // Ждем последний байт
+      while(SPI_I2S_GetFlagStatus(SPI1,SPI_I2S_FLAG_TXE) == SET);
+      //while(SPI_I2S_GetFlagStatus(SPI1,SPI_I2S_FLAG_BSY) == SET);
+      //DMA_Cmd(DMA1_Stream5, DISABLE);
+    }
   }
   /************************************************************************************************
   Прерывание по TIM7 - 1 мс. Ведем отсчет времени (системные часы).
