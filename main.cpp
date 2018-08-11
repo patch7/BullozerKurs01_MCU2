@@ -10,25 +10,28 @@
 #include "stm32f4xx_tim.h"
 #include "sliding_median.h"
 
-// voltage_5   (ADCConvertedValue[0])
-// voltage_2   (ADCConvertedValue[1])
-// voltage_11  (ADCConvertedValue[2])
-// voltage_8   (ADCConvertedValue[3])
-// voltage_17  (ADCConvertedValue[4])
-// voltage_14  (ADCConvertedValue[5])
-// voltage_4   (ADCConvertedValue[6])
-// voltage_1   (ADCConvertedValue[7])
-// voltage_16  (ADCConvertedValue[8])
-// voltage_13  (ADCConvertedValue[9])
-// voltage_9   (ADCConvertedValue[10])
-// voltage_12  (ADCConvertedValue[11])
-// voltage_15  (ADCConvertedValue[12])
-// voltage_18  (ADCConvertedValue[13])
-// voltage_10  (ADCConvertedValue[14])
-// voltage_7   (ADCConvertedValue[15])
-// voltage_sys (ADCConvertedValue[16])
-// voltage_3   (ADCConvertedValue[17])
-// voltage_6   (ADCConvertedValue[18])
+// voltage_5   (ConvertedValue[0])
+// voltage_2   (ConvertedValue[1])
+// voltage_11  (ConvertedValue[2])
+// voltage_8   (ConvertedValue[3])
+// voltage_17  (ConvertedValue[4])
+// voltage_14  (ConvertedValue[5])
+// voltage_4   (ConvertedValue[6])
+// voltage_1   (ConvertedValue[7])
+// voltage_16  (ConvertedValue[8])
+// voltage_13  (ConvertedValue[9])
+// voltage_9   (ConvertedValue[10])
+// voltage_12  (ConvertedValue[11])
+// voltage_15  (ConvertedValue[12])
+// voltage_18  (ConvertedValue[13])
+// voltage_10  (ConvertedValue[14])
+// voltage_7   (ConvertedValue[15])
+// voltage_sys (ConvertedValue[16])
+// voltage_3   (ConvertedValue[17])
+// voltage_6   (ConvertedValue[18])
+
+// digital_in  (ConvertedValue[19]) ch1 - ch16
+// digital_in  (ConvertedValue[20]) ch17, ch18, in5V, address
 
 #define ONE_MS         (time_flag[0])
 #define TEN_MS         (time_flag[1])
@@ -36,9 +39,7 @@
 #define HUNDRED_MS     (time_flag[3])
 
 static uint32_t time_ms       = 0;
-static volatile uint16_t ADCConvertedValue[19];
-static volatile uint16_t SPITxValue[5] {5, 6, 7, 8, 9};
-static volatile uint16_t SPIRxValue[5] {5, 6, 7, 8, 9};
+static volatile uint16_t ConvertedValue[21];
 
 std::queue<CanTxMsg, std::list<CanTxMsg>> QueueCanTxMsg;
 
@@ -54,54 +55,6 @@ void DigitalInit(void);
 bool CanTxMailBoxEmpty(CAN_TypeDef*);
 
 bool time_flag[4] = {false};
-
-struct Data24Bit
-{
-  uint8_t chanel1  : 1;
-  uint8_t chanel2  : 1;
-  uint8_t chanel3  : 1;
-  uint8_t chanel4  : 1;
-  uint8_t chanel5  : 1;
-  uint8_t chanel6  : 1;
-  uint8_t chanel7  : 1;
-  uint8_t chanel8  : 1;
-  uint8_t chanel9  : 1;
-  uint8_t chanel10 : 1;
-  uint8_t chanel11 : 1;
-  uint8_t chanel12 : 1;
-  uint8_t chanel13 : 1;
-  uint8_t chanel14 : 1;
-  uint8_t chanel15 : 1;
-  uint8_t chanel16 : 1;
-  uint8_t chanel17 : 1;
-  uint8_t chanel18 : 1;
-  uint8_t v5power  : 1;
-  uint8_t address  : 1;
-  Data24Bit& operator=(const uint32_t data)
-  {
-    chanel1  = 0x0001 & data;
-    chanel2  = 0x0001 & data >> 1;
-    chanel3  = 0x0001 & data >> 2;
-    chanel4  = 0x0001 & data >> 3;
-    chanel5  = 0x0001 & data >> 4;
-    chanel6  = 0x0001 & data >> 5;
-    chanel7  = 0x0001 & data >> 6;
-    chanel8  = 0x0001 & data >> 7;
-    chanel9  = 0x0001 & data >> 8;
-    chanel10 = 0x0001 & data >> 9;
-    chanel11 = 0x0001 & data >> 10;
-    chanel12 = 0x0001 & data >> 11;
-    chanel13 = 0x0001 & data >> 12;
-    chanel14 = 0x0001 & data >> 13;
-    chanel15 = 0x0001 & data >> 14;
-    chanel16 = 0x0001 & data >> 15;
-    chanel17 = 0x0001 & data >> 16;
-    chanel18 = 0x0001 & data >> 17;
-    v5power  = 0x0001 & data >> 18;
-    address  = 0x0001 & data >> 19;
-    return *this;
-  }
-} GPIO_Data;
 
 void main()
 {
@@ -139,40 +92,14 @@ void main()
     if(ONE_MS)
     {
       //Вызвать в месте использования данных или в пару раз чаще их использования.
-      GPIO_Data = GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_7)  << 19 |
-                  GPIO_ReadInputDataBit(GPIOF, GPIO_Pin_15) << 18 |
-                  GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_1)  << 17 |
-                  GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_0)  << 16 | GPIO_ReadInputData(GPIOE);
-
+      ConvertedValue[19] = GPIO_ReadInputData(GPIOE);
+      ConvertedValue[20] = GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_7)  << 3 |
+                           GPIO_ReadInputDataBit(GPIOF, GPIO_Pin_15) << 2 |
+                           GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_1)  << 1 |
+                           GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_0);
       DMAandSPIInit();
       ONE_MS = false;
     }
-
-    if(HUNDRED_MS)
-    {
-      CanTxMsg TxMessage;
-      TxMessage.StdId   = 0x300;
-      TxMessage.RTR     = CAN_RTR_DATA;
-      TxMessage.IDE     = CAN_ID_STD;
-      TxMessage.DLC     = 5;
-      TxMessage.Data[0] = SPITxValue[0];
-      TxMessage.Data[1] = SPITxValue[1];
-      TxMessage.Data[2] = SPITxValue[2];
-      TxMessage.Data[3] = SPITxValue[3];
-      TxMessage.Data[4] = SPITxValue[4];
-      QueueCanTxMsg.push(TxMessage);
-
-      TxMessage.StdId   = 0x301;
-      TxMessage.Data[0] = SPIRxValue[0];
-      TxMessage.Data[1] = SPIRxValue[1];
-      TxMessage.Data[2] = SPIRxValue[2];
-      TxMessage.Data[3] = SPIRxValue[3];
-      TxMessage.Data[4] = SPIRxValue[4];
-      QueueCanTxMsg.push(TxMessage);
-      
-      HUNDRED_MS = false;
-    }
-
 
     while(!QueueCanTxMsg.empty() && CanTxMailBoxEmpty(CAN1))
     {
@@ -216,6 +143,11 @@ void FlashInit()
   FLASH_PrefetchBufferCmd(ENABLE);
   FLASH_SetLatency(FLASH_Latency_5);
 }
+/**************************************************************************************************
+Настройка DMA для управления Rx/Tx SPI.
+При различных буферах на прием и передачу, не работает!!!
+Если Rx или Tx не используется, его настройка также необходима!!!
+**************************************************************************************************/
 void DMAandSPIInit()
 {
   RCC_APB1PeriphClockCmd(RCC_APB1Periph_SPI3, ENABLE);
@@ -242,24 +174,24 @@ void DMAandSPIInit()
   SPI_InitStruct.SPI_Mode              = SPI_Mode_Master;
   SPI_InitStruct.SPI_DataSize          = SPI_DataSize_16b;
   SPI_InitStruct.SPI_NSS               = SPI_NSS_Soft;
-  SPI_InitStruct.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_256;
+  SPI_InitStruct.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_64;
   SPI_InitStruct.SPI_FirstBit          = SPI_FirstBit_MSB;
 
   DMA_InitTypeDef DMA_InitStruct;
   DMA_StructInit(&DMA_InitStruct);
   DMA_InitStruct.DMA_Channel            = DMA_Channel_0;
   DMA_InitStruct.DMA_PeripheralBaseAddr = (uint32_t)&(SPI3->DR);
-  DMA_InitStruct.DMA_Memory0BaseAddr    = (uint32_t)(SPIRxValue);
-  DMA_InitStruct.DMA_BufferSize         = 5;
-  DMA_InitStruct.DMA_MemoryInc          = DMA_MemoryInc_Enable;
+  DMA_InitStruct.DMA_Memory0BaseAddr    = (uint32_t)(nullptr);
+  DMA_InitStruct.DMA_BufferSize         = 21;
+  DMA_InitStruct.DMA_MemoryInc          = DMA_MemoryInc_Disable;
   DMA_InitStruct.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
   DMA_InitStruct.DMA_MemoryDataSize     = DMA_MemoryDataSize_HalfWord;
   DMA_InitStruct.DMA_Priority           = DMA_Priority_High;
-  //DMA_InitStruct.DMA_Mode               = DMA_Mode_Circular;
   DMA_Init(DMA1_Stream0, &DMA_InitStruct);
 
-  DMA_InitStruct.DMA_Memory0BaseAddr    = (uint32_t)(SPITxValue);
+  DMA_InitStruct.DMA_Memory0BaseAddr    = (uint32_t)(ConvertedValue);
   DMA_InitStruct.DMA_DIR                = DMA_DIR_MemoryToPeripheral;
+  DMA_InitStruct.DMA_MemoryInc          = DMA_MemoryInc_Enable;
   DMA_Init(DMA1_Stream5, &DMA_InitStruct);
 
   SPI_Init(SPI3, &SPI_InitStruct);
@@ -306,7 +238,7 @@ void DMAforADCInit()
   DMA_StructInit(&DMA_InitStruct);
   DMA_InitStruct.DMA_Channel            = DMA_Channel_0;
   DMA_InitStruct.DMA_PeripheralBaseAddr = (uint32_t)&(ADC1->DR);
-  DMA_InitStruct.DMA_Memory0BaseAddr    = (uint32_t)ADCConvertedValue;
+  DMA_InitStruct.DMA_Memory0BaseAddr    = (uint32_t)ConvertedValue;
   DMA_InitStruct.DMA_BufferSize         = 16;
   DMA_InitStruct.DMA_MemoryInc          = DMA_MemoryInc_Enable;
   DMA_InitStruct.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
@@ -317,7 +249,7 @@ void DMAforADCInit()
   
   DMA_InitStruct.DMA_Channel            = DMA_Channel_2;
   DMA_InitStruct.DMA_PeripheralBaseAddr = (uint32_t)&(ADC3->DR);
-  DMA_InitStruct.DMA_Memory0BaseAddr    = (uint32_t)(ADCConvertedValue + 16);
+  DMA_InitStruct.DMA_Memory0BaseAddr    = (uint32_t)(ConvertedValue + 16);
   DMA_InitStruct.DMA_BufferSize         = 3;
   DMA_Init(DMA2_Stream1, &DMA_InitStruct);
   
