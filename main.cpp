@@ -36,7 +36,8 @@
 #define ONE_MS         (time_flag[0])
 #define TEN_MS         (time_flag[1])
 #define TWENTY_FIVE_MS (time_flag[2])
-#define HUNDRED_MS     (time_flag[3])
+#define FIFTY_MS       (time_flaf[3])
+#define HUNDRED_MS     (time_flag[4])
 
 static uint32_t time_ms       = 0;
 static volatile uint16_t ConvertedValue[21];
@@ -53,8 +54,9 @@ void FlashInit(void);
 void DMAandSPIInit(void);
 void DigitalInit(void);
 bool CanTxMailBoxEmpty(CAN_TypeDef*);
+void Debounce(void);
 
-bool time_flag[4] = {false};
+bool time_flag[5] = {false};
 
 void main()
 {
@@ -99,6 +101,12 @@ void main()
                            GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_0);
       DMAandSPIInit();
       ONE_MS = false;
+    }
+
+    if(FIFTY_MS)
+    {
+      Debounce();
+      FIFTY_MS = false;
     }
 
     while(!QueueCanTxMsg.empty() && CanTxMailBoxEmpty(CAN1))
@@ -544,8 +552,10 @@ extern "C"
         time_flag[1] = true;
       if(!(time_ms % 25))
         time_flag[2] = true;
-      if(!(time_ms % 100))
+      if(!(time_ms % 50))
         time_flag[3] = true;
+      if(!(time_ms % 100))
+        time_flag[4] = true;
     }
   }
   /************************************************************************************************
@@ -607,4 +617,23 @@ bool CanTxMailBoxEmpty(CAN_TypeDef* CANx)
     return true;
   else
     return false;
+}
+
+void Debounce()
+{
+  static uint32_t temp    = 0;
+  uint32_t        send    = ConvertedValue[19] << 16 | ConvertedValue[20];
+  uint32_t        current = GPIO_ReadInputData(GPIOE) << 16 |
+                            GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_7)  << 15 |
+                            GPIO_ReadInputDataBit(GPIOF, GPIO_Pin_15) << 14 |
+                            GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_1)  << 13 |
+                            GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_0)  << 12;
+
+  for(uint8_t i = 12; i < 32; ++i)
+    if( (send & (1 << i)) != (current & (1 << i)) && (temp & (1 << i)) == (current & (1 << i)) )
+      send ^= (1 << i);
+
+  temp = current;
+  ConvertedValue[19] = send >> 16;
+  ConvertedValue[20] = send;
 }
