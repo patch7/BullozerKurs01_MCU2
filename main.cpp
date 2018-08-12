@@ -36,11 +36,12 @@
 #define ONE_MS         (time_flag[0])
 #define TEN_MS         (time_flag[1])
 #define TWENTY_FIVE_MS (time_flag[2])
-#define FIFTY_MS       (time_flaf[3])
+#define FIFTY_MS       (time_flag[3])
 #define HUNDRED_MS     (time_flag[4])
 
-static uint32_t time_ms       = 0;
+static uint32_t time_ms  = 0;
 static volatile uint16_t ConvertedValue[21];
+static bool time_flag[5] = {false};
 
 std::queue<CanTxMsg, std::list<CanTxMsg>> QueueCanTxMsg;
 
@@ -55,8 +56,7 @@ void DMAandSPIInit(void);
 void DigitalInit(void);
 bool CanTxMailBoxEmpty(CAN_TypeDef*);
 void Debounce(void);
-
-bool time_flag[5] = {false};
+void SPI3SendReceive(void);
 
 void main()
 {
@@ -91,21 +91,10 @@ void main()
   
   while(true)
   {
-    if(ONE_MS)
-    {
-      //Вызвать в месте использования данных или в пару раз чаще их использования.
-      ConvertedValue[19] = GPIO_ReadInputData(GPIOE);
-      ConvertedValue[20] = GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_7)  << 3 |
-                           GPIO_ReadInputDataBit(GPIOF, GPIO_Pin_15) << 2 |
-                           GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_1)  << 1 |
-                           GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_0);
-      DMAandSPIInit();
-      ONE_MS = false;
-    }
-
     if(FIFTY_MS)
     {
       Debounce();
+      SPI3SendReceive();
       FIFTY_MS = false;
     }
 
@@ -203,14 +192,12 @@ void DMAandSPIInit()
   DMA_Init(DMA1_Stream5, &DMA_InitStruct);
 
   SPI_Init(SPI3, &SPI_InitStruct);
-
-  /***********************************************************************************************
-  Разбиение на отдельные функции запуска передачи и отключения SPI, должно устранить бесполезное
-  переписывание регистров SPI & DMA, что сохранит нам несколько тактов. Так же это устранит
-  зависание в цикле на проверку флагов, что должно благоприятно сказаться на отзывчивости системы.
-  НЕОБХОДИМО ЗАМЕРИТЬ ПРИБЛИЗИТЕЛЬНОЕ ВРЕМЯ ЗАВИСАНИЯ В ЦИКЛЕ ПРОВЕРКИ ФЛАГОВ!!!
-  ************************************************************************************************/
-  //Вынести в отдельную функцию SPISetSend
+}
+/**************************************************************************************************
+  Выделение в отдельную функцию вкл. и выкл. SPI&DMA, убирает бесполезное переписывание регистров.
+**************************************************************************************************/
+void SPI3SendReceive()
+{
   DMA_Cmd(DMA1_Stream0, ENABLE);
   DMA_Cmd(DMA1_Stream5, ENABLE);
 
@@ -219,11 +206,9 @@ void DMAandSPIInit()
 
   SPI_Cmd(SPI3, ENABLE);
 
-  //Перед вызовом функции SPIResetSend проверить флаги на RESET
   while (DMA_GetFlagStatus(DMA1_Stream5, DMA_IT_TCIF5) == RESET);
   while (DMA_GetFlagStatus(DMA1_Stream0, DMA_IT_TCIF0) == RESET);
 
-  //Вынести в отдельную функцию SPIResetSend
   DMA_ClearFlag(DMA1_Stream5, DMA_IT_TCIF5);
   DMA_ClearFlag(DMA1_Stream0, DMA_IT_TCIF0);
 
@@ -622,7 +607,8 @@ bool CanTxMailBoxEmpty(CAN_TypeDef* CANx)
 void Debounce()
 {
   static uint32_t temp    = 0;
-  uint32_t        send    = ConvertedValue[19] << 16 | ConvertedValue[20];
+  uint32_t        send    = ConvertedValue[19] << 16;
+                  send   |= ConvertedValue[20];
   uint32_t        current = GPIO_ReadInputData(GPIOE) << 16 |
                             GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_7)  << 15 |
                             GPIO_ReadInputDataBit(GPIOF, GPIO_Pin_15) << 14 |
