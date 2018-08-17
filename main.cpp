@@ -41,7 +41,7 @@
 
 static uint32_t time_ms  = 0;
 static volatile uint16_t ConvertedValue[21];
-static bool time_flag[5] = {false};
+static bool time_flag[5];
 
 std::queue<CanTxMsg, std::list<CanTxMsg>> QueueCanTxMsg;
 
@@ -94,7 +94,6 @@ void main()
     if(FIFTY_MS)
     {
       Debounce();
-      SPI3SendReceive();
       FIFTY_MS = false;
     }
 
@@ -171,7 +170,7 @@ void DMAandSPIInit()
   SPI_InitStruct.SPI_Mode              = SPI_Mode_Master;
   SPI_InitStruct.SPI_DataSize          = SPI_DataSize_16b;
   SPI_InitStruct.SPI_NSS               = SPI_NSS_Soft;
-  SPI_InitStruct.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_64;
+  SPI_InitStruct.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_4;
   SPI_InitStruct.SPI_FirstBit          = SPI_FirstBit_MSB;
 
   DMA_InitTypeDef DMA_InitStruct;
@@ -183,7 +182,7 @@ void DMAandSPIInit()
   DMA_InitStruct.DMA_MemoryInc          = DMA_MemoryInc_Disable;
   DMA_InitStruct.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
   DMA_InitStruct.DMA_MemoryDataSize     = DMA_MemoryDataSize_HalfWord;
-  DMA_InitStruct.DMA_Priority           = DMA_Priority_High;
+  DMA_InitStruct.DMA_Priority           = DMA_Priority_Low;
   DMA_Init(DMA1_Stream0, &DMA_InitStruct);
 
   DMA_InitStruct.DMA_Memory0BaseAddr    = (uint32_t)(ConvertedValue);
@@ -532,15 +531,18 @@ extern "C"
       TIM_ClearITPendingBit(TIM7, TIM_IT_Update);
       ++time_ms;
 
-      time_flag[0] = true;
+      ONE_MS = true;
       if(!(time_ms % 10))
-        time_flag[1] = true;
+        TEN_MS = true;
       if(!(time_ms % 25))
-        time_flag[2] = true;
+        TWENTY_FIVE_MS = true;
       if(!(time_ms % 50))
-        time_flag[3] = true;
+      {
+        SPI3SendReceive();
+        FIFTY_MS = true;
+      }
       if(!(time_ms % 100))
-        time_flag[4] = true;
+        HUNDRED_MS = true;
     }
   }
   /************************************************************************************************
@@ -553,18 +555,8 @@ extern "C"
   {
     if(CAN_GetITStatus(CAN1, CAN_IT_FMP0))
     {
-      CanRxMsg RxMsg;
       CAN_ClearITPendingBit(CAN1, CAN_IT_FMP0);
-      CAN_Receive(CAN1, CAN_FIFO0, &RxMsg);
       CAN_FIFORelease(CAN1, CAN_FIFO0);
-      
-      if(RxMsg.IDE == CAN_ID_STD)
-        switch(RxMsg.StdId)
-        {
-          //case 0x005:
-          //  kpp.DigitalSet(RxMsg.Data[4] << 8 | RxMsg.Data[0], cal);
-          //  end_transmit = time_ms;                                                       break;
-        }
     }
   }
   void CAN1_RX1_IRQHandler()
