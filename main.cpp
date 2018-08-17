@@ -36,10 +36,12 @@
 #define ONE_MS         (time_flag[0])
 #define TEN_MS         (time_flag[1])
 #define TWENTY_FIVE_MS (time_flag[2])
-#define HUNDRED_MS     (time_flag[3])
+#define FIFTY_MS       (time_flag[3])
+#define HUNDRED_MS     (time_flag[4])
 
-static uint32_t time_ms       = 0;
+static uint32_t time_ms  = 0;
 static volatile uint16_t ConvertedValue[21];
+static bool time_flag[5];
 
 std::queue<CanTxMsg, std::list<CanTxMsg>> QueueCanTxMsg;
 
@@ -53,8 +55,8 @@ void FlashInit(void);
 void DMAandSPIInit(void);
 void DigitalInit(void);
 bool CanTxMailBoxEmpty(CAN_TypeDef*);
-
-bool time_flag[4] = {false};
+void Debounce(void);
+void SPI3SendReceive(void);
 
 void main()
 {
@@ -89,16 +91,10 @@ void main()
   
   while(true)
   {
-    if(ONE_MS)
+    if(FIFTY_MS)
     {
-      //Вызвать в месте использования данных или в пару раз чаще их использования.
-      ConvertedValue[19] = GPIO_ReadInputData(GPIOE);
-      ConvertedValue[20] = GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_7)  << 3 |
-                           GPIO_ReadInputDataBit(GPIOF, GPIO_Pin_15) << 2 |
-                           GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_1)  << 1 |
-                           GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_0);
-      DMAandSPIInit();
-      ONE_MS = false;
+      Debounce();
+      FIFTY_MS = false;
     }
 
     while(!QueueCanTxMsg.empty() && CanTxMailBoxEmpty(CAN1))
@@ -174,7 +170,7 @@ void DMAandSPIInit()
   SPI_InitStruct.SPI_Mode              = SPI_Mode_Master;
   SPI_InitStruct.SPI_DataSize          = SPI_DataSize_16b;
   SPI_InitStruct.SPI_NSS               = SPI_NSS_Soft;
-  SPI_InitStruct.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_64;
+  SPI_InitStruct.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_4;
   SPI_InitStruct.SPI_FirstBit          = SPI_FirstBit_MSB;
 
   DMA_InitTypeDef DMA_InitStruct;
@@ -186,7 +182,7 @@ void DMAandSPIInit()
   DMA_InitStruct.DMA_MemoryInc          = DMA_MemoryInc_Disable;
   DMA_InitStruct.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
   DMA_InitStruct.DMA_MemoryDataSize     = DMA_MemoryDataSize_HalfWord;
-  DMA_InitStruct.DMA_Priority           = DMA_Priority_High;
+  DMA_InitStruct.DMA_Priority           = DMA_Priority_Low;
   DMA_Init(DMA1_Stream0, &DMA_InitStruct);
 
   DMA_InitStruct.DMA_Memory0BaseAddr    = (uint32_t)(ConvertedValue);
@@ -195,14 +191,12 @@ void DMAandSPIInit()
   DMA_Init(DMA1_Stream5, &DMA_InitStruct);
 
   SPI_Init(SPI3, &SPI_InitStruct);
-
-  /***********************************************************************************************
-  Разбиение на отдельные функции запуска передачи и отключения SPI, должно устранить бесполезное
-  переписывание регистров SPI & DMA, что сохранит нам несколько тактов. Так же это устранит
-  зависание в цикле на проверку флагов, что должно благоприятно сказаться на отзывчивости системы.
-  НЕОБХОДИМО ЗАМЕРИТЬ ПРИБЛИЗИТЕЛЬНОЕ ВРЕМЯ ЗАВИСАНИЯ В ЦИКЛЕ ПРОВЕРКИ ФЛАГОВ!!!
-  ************************************************************************************************/
-  //Вынести в отдельную функцию SPISetSend
+}
+/**************************************************************************************************
+  Выделение в отдельную функцию вкл. и выкл. SPI&DMA, убирает бесполезное переписывание регистров.
+**************************************************************************************************/
+void SPI3SendReceive()
+{
   DMA_Cmd(DMA1_Stream0, ENABLE);
   DMA_Cmd(DMA1_Stream5, ENABLE);
 
@@ -211,11 +205,9 @@ void DMAandSPIInit()
 
   SPI_Cmd(SPI3, ENABLE);
 
-  //Перед вызовом функции SPIResetSend проверить флаги на RESET
   while (DMA_GetFlagStatus(DMA1_Stream5, DMA_IT_TCIF5) == RESET);
   while (DMA_GetFlagStatus(DMA1_Stream0, DMA_IT_TCIF0) == RESET);
 
-  //Вынести в отдельную функцию SPIResetSend
   DMA_ClearFlag(DMA1_Stream5, DMA_IT_TCIF5);
   DMA_ClearFlag(DMA1_Stream0, DMA_IT_TCIF0);
 
@@ -539,13 +531,18 @@ extern "C"
       TIM_ClearITPendingBit(TIM7, TIM_IT_Update);
       ++time_ms;
 
-      time_flag[0] = true;
+      ONE_MS = true;
       if(!(time_ms % 10))
-        time_flag[1] = true;
+        TEN_MS = true;
       if(!(time_ms % 25))
-        time_flag[2] = true;
+        TWENTY_FIVE_MS = true;
+      if(!(time_ms % 50))
+      {
+        SPI3SendReceive();
+        FIFTY_MS = true;
+      }
       if(!(time_ms % 100))
-        time_flag[3] = true;
+        HUNDRED_MS = true;
     }
   }
   /************************************************************************************************
@@ -558,18 +555,8 @@ extern "C"
   {
     if(CAN_GetITStatus(CAN1, CAN_IT_FMP0))
     {
-      CanRxMsg RxMsg;
       CAN_ClearITPendingBit(CAN1, CAN_IT_FMP0);
-      CAN_Receive(CAN1, CAN_FIFO0, &RxMsg);
       CAN_FIFORelease(CAN1, CAN_FIFO0);
-      
-      if(RxMsg.IDE == CAN_ID_STD)
-        switch(RxMsg.StdId)
-        {
-          //case 0x005:
-          //  kpp.DigitalSet(RxMsg.Data[4] << 8 | RxMsg.Data[0], cal);
-          //  end_transmit = time_ms;                                                       break;
-        }
     }
   }
   void CAN1_RX1_IRQHandler()
@@ -607,4 +594,24 @@ bool CanTxMailBoxEmpty(CAN_TypeDef* CANx)
     return true;
   else
     return false;
+}
+
+void Debounce()
+{
+  static uint32_t temp    = 0;
+  uint32_t        send    = ConvertedValue[19] << 16;
+                  send   |= ConvertedValue[20];
+  uint32_t        current = GPIO_ReadInputData(GPIOE) << 16 |
+                            GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_7)  << 15 |
+                            GPIO_ReadInputDataBit(GPIOF, GPIO_Pin_15) << 14 |
+                            GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_1)  << 13 |
+                            GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_0)  << 12;
+
+  for(uint8_t i = 12; i < 32; ++i)
+    if( (send & (1 << i)) != (current & (1 << i)) && (temp & (1 << i)) == (current & (1 << i)) )
+      send ^= (1 << i);
+
+  temp = current;
+  ConvertedValue[19] = send >> 16;
+  ConvertedValue[20] = send;
 }
