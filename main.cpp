@@ -56,7 +56,8 @@ void DMAandSPIInit(void);
 void DigitalInit(void);
 bool CanTxMailBoxEmpty(CAN_TypeDef*);
 void Debounce(void);
-void SPI3SendReceive(void);
+void SPI3StartSendReceive(void);
+void SPI3StopSendReceive(void);
 
 void main()
 {
@@ -133,6 +134,10 @@ void MaxAllRccBusConfig()
     RCC_SYSCLKConfig(RCC_SYSCLKSource_PLLCLK);//SYSCLK clock = PLLCLK
     while(RCC_GetSYSCLKSource() != 8) {}
   }
+
+  RCC_ClocksTypeDef clock;
+  RCC_GetClocksFreq(&clock);
+  SysTick_Config(clock.HCLK_Frequency / 1000);
 }
 void FlashInit()
 {
@@ -170,7 +175,7 @@ void DMAandSPIInit()
   SPI_InitStruct.SPI_Mode              = SPI_Mode_Master;
   SPI_InitStruct.SPI_DataSize          = SPI_DataSize_16b;
   SPI_InitStruct.SPI_NSS               = SPI_NSS_Soft;
-  SPI_InitStruct.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_4;
+  SPI_InitStruct.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_2;
   SPI_InitStruct.SPI_FirstBit          = SPI_FirstBit_MSB;
 
   DMA_InitTypeDef DMA_InitStruct;
@@ -191,11 +196,24 @@ void DMAandSPIInit()
   DMA_Init(DMA1_Stream5, &DMA_InitStruct);
 
   SPI_Init(SPI3, &SPI_InitStruct);
+
+  DMA_ITConfig(DMA1_Stream0, DMA_IT_TC, ENABLE);
+  DMA_ITConfig(DMA1_Stream5, DMA_IT_TC, ENABLE);
+
+  NVIC_InitTypeDef NVIC_InitStruct;
+  NVIC_InitStruct.NVIC_IRQChannel                   = DMA1_Stream0_IRQn;
+  NVIC_InitStruct.NVIC_IRQChannelPreemptionPriority = 0x0;
+  NVIC_InitStruct.NVIC_IRQChannelSubPriority        = 0x0;
+  NVIC_InitStruct.NVIC_IRQChannelCmd                = ENABLE;
+  NVIC_Init(&NVIC_InitStruct);
+  
+  NVIC_InitStruct.NVIC_IRQChannel                   = DMA1_Stream5_IRQn;
+  NVIC_Init(&NVIC_InitStruct);
 }
 /**************************************************************************************************
   Выделение в отдельную функцию вкл. и выкл. SPI&DMA, убирает бесполезное переписывание регистров.
 **************************************************************************************************/
-void SPI3SendReceive()
+void SPI3StartSendReceive()
 {
   DMA_Cmd(DMA1_Stream0, ENABLE);
   DMA_Cmd(DMA1_Stream5, ENABLE);
@@ -204,10 +222,10 @@ void SPI3SendReceive()
   SPI_I2S_DMACmd(SPI3, SPI_I2S_DMAReq_Tx, ENABLE);
 
   SPI_Cmd(SPI3, ENABLE);
+}
 
-  while (DMA_GetFlagStatus(DMA1_Stream5, DMA_IT_TCIF5) == RESET);
-  while (DMA_GetFlagStatus(DMA1_Stream0, DMA_IT_TCIF0) == RESET);
-
+void SPI3StopSendReceive()
+{
   DMA_ClearFlag(DMA1_Stream5, DMA_IT_TCIF5);
   DMA_ClearFlag(DMA1_Stream0, DMA_IT_TCIF0);
 
@@ -357,30 +375,18 @@ void DigitalInit()
 **************************************************************************************************/
 void TimerInit()
 {
-  TIM_DeInit(TIM7);
   TIM_DeInit(TIM8);
-  
-  RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM7, ENABLE);
   RCC_APB2PeriphClockCmd(RCC_APB2Periph_TIM8, ENABLE);
 
   TIM_TimeBaseInitTypeDef TIM_TimeBaseInitStruct;
   TIM_TimeBaseStructInit(&TIM_TimeBaseInitStruct);
   TIM_TimeBaseInitStruct.TIM_Prescaler = 839;//всегда +1, Mgz*10
-  TIM_TimeBaseInitStruct.TIM_Period    = 100;//1 мс
-  TIM_TimeBaseInit(TIM7, &TIM_TimeBaseInitStruct);
-
   TIM_TimeBaseInitStruct.TIM_Period    = 200;//1 мс
   TIM_TimeBaseInit(TIM8, &TIM_TimeBaseInitStruct);
 
   TIM_SetCounter(TIM8, 0);
-
-  TIM_ITConfig(TIM7, TIM_IT_Update, ENABLE);
-  NVIC_EnableIRQ(TIM7_IRQn);
-
   TIM_SelectOutputTrigger(TIM8, TIM_TRGOSource_Update);
-
   TIM_Cmd(TIM8, ENABLE);
-  TIM_Cmd(TIM7, ENABLE);
 }
 void CANInit()
 {
@@ -444,8 +450,7 @@ void CANInit()
   NVIC_InitStruct.NVIC_IRQChannel                   = CAN1_SCE_IRQn;
   NVIC_Init(&NVIC_InitStruct);
 
-  CAN_ITConfig(CAN1, CAN_IT_FMP0 | CAN_IT_FMP1 | CAN_IT_TME | CAN_IT_EWG |
-                     CAN_IT_EPV  | CAN_IT_LEC  | CAN_IT_ERR, ENABLE);
+  CAN_ITConfig(CAN1, CAN_IT_FMP0|CAN_IT_FMP1|CAN_IT_EWG|CAN_IT_EPV|CAN_IT_LEC|CAN_IT_ERR, ENABLE);
 }
 void TIM_PWMInit()
 {
@@ -521,29 +526,34 @@ extern "C"
     if(DMA_GetITStatus(DMA2_Stream1, DMA_IT_TCIF1))
       DMA_ClearITPendingBit(DMA2_Stream1, DMA_IT_TCIF1);
   }
+
+  void DMA1_Stream0_IRQHandler()
+  {
+    if(DMA_GetITStatus(DMA1_Stream5, DMA_IT_TCIF5) && DMA_GetITStatus(DMA1_Stream0, DMA_IT_TCIF0))
+      SPI3StopSendReceive();
+  }
+  void DMA1_Stream5_IRQHandler()
+  {
+    if(DMA_GetITStatus(DMA1_Stream5, DMA_IT_TCIF5) && DMA_GetITStatus(DMA1_Stream0, DMA_IT_TCIF0))
+      SPI3StopSendReceive();
+  }
   /************************************************************************************************
   Прерывание по TIM7 - 1 мс. Ведем отсчет времени (системные часы).
   ************************************************************************************************/
-  void TIM7_IRQHandler()
+  void SysTick_Handler()
   {
-    if(TIM_GetITStatus(TIM7, TIM_IT_Update))
-    {
-      TIM_ClearITPendingBit(TIM7, TIM_IT_Update);
-      ++time_ms;
+    ++time_ms;
 
-      ONE_MS = true;
-      if(!(time_ms % 10))
-        TEN_MS = true;
-      if(!(time_ms % 25))
-        TWENTY_FIVE_MS = true;
-      if(!(time_ms % 50))
-      {
-        SPI3SendReceive();
-        FIFTY_MS = true;
-      }
-      if(!(time_ms % 100))
-        HUNDRED_MS = true;
-    }
+    ONE_MS = true;
+    SPI3StartSendReceive();//попробовать отправлять из главного цикла программы.
+    if(!(time_ms % 10))
+      TEN_MS = true;
+    if(!(time_ms % 25))
+      TWENTY_FIVE_MS = true;
+    if(!(time_ms % 50))
+      FIFTY_MS = true;
+    if(!(time_ms % 100))
+      HUNDRED_MS = true;
   }
   /************************************************************************************************
   Принимает по CAN дискретные сигналы с ОУ - ЗАДЕЛ НА ДИСТАНЦИОННОЕ УПРАВЛЕНИЕ.
@@ -566,11 +576,6 @@ extern "C"
       CAN_ClearITPendingBit(CAN1, CAN_IT_FMP1);
       CAN_FIFORelease(CAN1, CAN_FIFO1);
     }
-  }
-  void CAN1_TX_IRQHandler()
-  {
-    if(CAN_GetITStatus(CAN1, CAN_IT_TME))
-      CAN_ClearITPendingBit(CAN1, CAN_IT_TME);
   }
   void CAN1_SCE_IRQHandler()
   {
