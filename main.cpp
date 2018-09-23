@@ -171,7 +171,7 @@ void DMAandSPIInit()
   SPI_InitStruct.SPI_Mode              = SPI_Mode_Master;
   SPI_InitStruct.SPI_DataSize          = SPI_DataSize_16b;
   SPI_InitStruct.SPI_NSS               = SPI_NSS_Soft;
-  SPI_InitStruct.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_64;
+  SPI_InitStruct.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_2;
   SPI_InitStruct.SPI_FirstBit          = SPI_FirstBit_MSB;
 
   DMA_InitTypeDef DMA_InitStruct;
