@@ -41,6 +41,7 @@
 
 static uint32_t time_ms  = 0;
 static volatile uint16_t ConvertedValue[21];
+static volatile uint16_t ReceivedSPIValue[21];
 static bool time_flag[5];
 
 std::queue<CanTxMsg, std::list<CanTxMsg>> QueueCanTxMsg;
@@ -58,6 +59,7 @@ bool CanTxMailBoxEmpty(CAN_TypeDef*);
 void Debounce(void);
 void SPI3StartSendReceive(void);
 void SPI3StopSendReceive(void);
+void setValve();
 
 void main()
 {
@@ -92,6 +94,12 @@ void main()
   
   while(true)
   {
+    if(ONE_MS)
+    {
+      setValve();
+      ONE_MS = false;
+    }
+
     if(FIFTY_MS)
     {
       Debounce();
@@ -182,9 +190,9 @@ void DMAandSPIInit()
   DMA_StructInit(&DMA_InitStruct);
   DMA_InitStruct.DMA_Channel            = DMA_Channel_0;
   DMA_InitStruct.DMA_PeripheralBaseAddr = (uint32_t)&(SPI3->DR);
-  DMA_InitStruct.DMA_Memory0BaseAddr    = (uint32_t)(nullptr);
+  DMA_InitStruct.DMA_Memory0BaseAddr    = (uint32_t)(ReceivedSPIValue);
   DMA_InitStruct.DMA_BufferSize         = 21;
-  DMA_InitStruct.DMA_MemoryInc          = DMA_MemoryInc_Disable;
+  DMA_InitStruct.DMA_MemoryInc          = DMA_MemoryInc_Enable;
   DMA_InitStruct.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
   DMA_InitStruct.DMA_MemoryDataSize     = DMA_MemoryDataSize_HalfWord;
   DMA_InitStruct.DMA_Priority           = DMA_Priority_Low;
@@ -192,7 +200,7 @@ void DMAandSPIInit()
 
   DMA_InitStruct.DMA_Memory0BaseAddr    = (uint32_t)(ConvertedValue);
   DMA_InitStruct.DMA_DIR                = DMA_DIR_MemoryToPeripheral;
-  DMA_InitStruct.DMA_MemoryInc          = DMA_MemoryInc_Enable;
+  //DMA_InitStruct.DMA_MemoryInc          = DMA_MemoryInc_Enable;
   DMA_Init(DMA1_Stream5, &DMA_InitStruct);
 
   SPI_Init(SPI3, &SPI_InitStruct);
@@ -300,7 +308,8 @@ void ADCInputInit()
   GPIO_InitStruct.GPIO_Pin   = GPIO_Pin_0 | GPIO_Pin_1;
   GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  GPIO_InitStruct.GPIO_Pin   = GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_2 | GPIO_Pin_3;
+  GPIO_InitStruct.GPIO_Pin   = GPIO_Pin_0 | GPIO_Pin_1 | GPIO_Pin_2 |
+                               GPIO_Pin_3 | GPIO_Pin_4 | GPIO_Pin_5;
   GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   GPIO_InitStruct.GPIO_Pin   = GPIO_Pin_6 | GPIO_Pin_7 | GPIO_Pin_8;
@@ -607,10 +616,10 @@ void Debounce()
   uint32_t        send    = ConvertedValue[19] << 16;
                   send   |= ConvertedValue[20];
   uint32_t        current = GPIO_ReadInputData(GPIOE) << 16 |
-                            GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_7)  << 15 |
-                            GPIO_ReadInputDataBit(GPIOF, GPIO_Pin_15) << 14 |
-                            GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_1)  << 13 |
-                            GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_0)  << 12;
+                            GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_0)  << 15 |
+                            GPIO_ReadInputDataBit(GPIOD, GPIO_Pin_1)  << 14 |
+                            GPIO_ReadInputDataBit(GPIOF, GPIO_Pin_15) << 13 |
+                            GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_7)  << 12;
 
   for(uint8_t i = 12; i < 32; ++i)
     if( (send & (1 << i)) != (current & (1 << i)) && (temp & (1 << i)) == (current & (1 << i)) )
@@ -619,4 +628,16 @@ void Debounce()
   temp = current;
   ConvertedValue[19] = send >> 16;
   ConvertedValue[20] = send;
+}
+
+void setValve()
+{
+  TIM_SetCompare1(TIM2, ReceivedSPIValue[0]);
+  TIM_SetCompare1(TIM3, ReceivedSPIValue[1]);
+  TIM_SetCompare2(TIM2, ReceivedSPIValue[2]);
+  TIM_SetCompare2(TIM3, ReceivedSPIValue[3]);
+  TIM_SetCompare3(TIM2, ReceivedSPIValue[4]);
+  TIM_SetCompare3(TIM3, ReceivedSPIValue[5]);
+  TIM_SetCompare4(TIM2, ReceivedSPIValue[6]);
+  TIM_SetCompare4(TIM3, ReceivedSPIValue[7]);
 }
