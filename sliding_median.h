@@ -1,15 +1,14 @@
 #ifndef __SLIDING
 #define __SLIDING
 
-#include "stm32f4xx.h"
 #include <deque>
 #include <algorithm>
 
-template<typename Any>
-class SlidingMedian : public std::deque<Any>
+template<typename Any, uint16_t size = 7>
+class SlidingMedian
 {
 public:
-  SlidingMedian(uint32_t cnt = 7) : std::deque<Any>(cnt) {}
+  SlidingMedian() : fifo(size) {}
   SlidingMedian(const SlidingMedian&)            = delete;
   SlidingMedian(SlidingMedian&&)                 = delete;
   SlidingMedian& operator=(const SlidingMedian&) = delete;
@@ -18,27 +17,19 @@ public:
   const Any& get();
   ~SlidingMedian()                               = default;
 private:
-  bool change = false;
-  Any mediane;
+  std::deque<Any> fifo;
 };
 
-template<typename Any> void SlidingMedian<Any>::push(const Any& a)
+template<typename Any, uint16_t size> void SlidingMedian<Any, size>::push(const Any& a)
 {
-  std::deque<Any>::pop_front();
-  std::deque<Any>::push_back(a);
-  change = true;
+  fifo.pop_front();
+  fifo.push_back(a);
 }
 
-template<typename Any> const Any& SlidingMedian<Any>::get()
+template<typename Any, uint16_t size> const Any& SlidingMedian<Any, size>::get()
 {
-  if(change)
-  {
-    std::deque<Any> d(*this);
-    std::sort(d.begin(), d.end());
-    mediane = *(d.begin() + d.size() / 2);
-    change = false;
-  }
-  return mediane;
+  std::sort(fifo.begin(), fifo.end());
+  return *(fifo.begin() + fifo.size() / 2);
 }
 
 #endif /* __SLIDING */
