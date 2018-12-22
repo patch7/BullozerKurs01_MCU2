@@ -10,9 +10,7 @@
 #include "stm32f4xx_tim.h"
 #include "sliding_median.h"
 
-// voltage_5   (ConvertedValue[0])
-// voltage_2   (ConvertedValue[1])
-// voltage_11  (ConvertedValue[2])
+// voltage_5   (ConvertedValue[0]) voltage_2   (ConvertedValue[1]) voltage_11  (ConvertedValue[2])
 // voltage_8   (ConvertedValue[3])
 // voltage_17  (ConvertedValue[4])
 // voltage_14  (ConvertedValue[5])
@@ -94,12 +92,11 @@ void main()
   
   while(true)
   {
-    if(ONE_MS)
+    if(TEN_MS)
     {
       setValve();
-      ONE_MS = false;
+      TEN_MS = false;
     }
-
     if(FIFTY_MS)
     {
       Debounce();
@@ -200,7 +197,6 @@ void DMAandSPIInit()
 
   DMA_InitStruct.DMA_Memory0BaseAddr    = (uint32_t)(ConvertedValue);
   DMA_InitStruct.DMA_DIR                = DMA_DIR_MemoryToPeripheral;
-  //DMA_InitStruct.DMA_MemoryInc          = DMA_MemoryInc_Enable;
   DMA_Init(DMA1_Stream5, &DMA_InitStruct);
 
   SPI_Init(SPI3, &SPI_InitStruct);
@@ -288,7 +284,7 @@ void DMAforADCInit()
   NVIC_Init(&NVIC_InitStruct);
 }
 /**************************************************************************************************
-Настраиваем ADC1 (0-15), ADC3 (0-7) на преобразование.
+Настраиваем ADC1 (0-15), ADC3 (4-6) на преобразование.
 **************************************************************************************************/
 void ADCInputInit()
 {
@@ -317,6 +313,7 @@ void ADCInputInit()
 
   ADC_CommonInitTypeDef ADC_CommonInitStruct;
   ADC_CommonStructInit(&ADC_CommonInitStruct);
+  ADC_CommonInitStruct.ADC_Prescaler = ADC_Prescaler_Div6;
   ADC_CommonInit(&ADC_CommonInitStruct);
 
   ADC_InitTypeDef ADC_InitStruct;
@@ -330,26 +327,26 @@ void ADCInputInit()
   ADC_InitStruct.ADC_NbrOfConversion      = 3;
   ADC_Init(ADC3, &ADC_InitStruct);
   
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_0,  1,  ADC_SampleTime_3Cycles);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_1,  2,  ADC_SampleTime_3Cycles);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_2,  3,  ADC_SampleTime_3Cycles);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_3,  4,  ADC_SampleTime_3Cycles);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_4,  5,  ADC_SampleTime_3Cycles);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_5,  6,  ADC_SampleTime_3Cycles);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_6,  7,  ADC_SampleTime_3Cycles);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_7,  8,  ADC_SampleTime_3Cycles);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_8,  9,  ADC_SampleTime_3Cycles);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_9,  10, ADC_SampleTime_3Cycles);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_10, 11, ADC_SampleTime_3Cycles);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_11, 12, ADC_SampleTime_3Cycles);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_12, 13, ADC_SampleTime_3Cycles);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_13, 14, ADC_SampleTime_3Cycles);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_14, 15, ADC_SampleTime_3Cycles);
-  ADC_RegularChannelConfig(ADC1, ADC_Channel_15, 16, ADC_SampleTime_3Cycles);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_0,  1,  ADC_SampleTime_480Cycles);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_1,  2,  ADC_SampleTime_480Cycles);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_2,  3,  ADC_SampleTime_480Cycles);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_3,  4,  ADC_SampleTime_480Cycles);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_4,  5,  ADC_SampleTime_480Cycles);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_5,  6,  ADC_SampleTime_480Cycles);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_6,  7,  ADC_SampleTime_480Cycles);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_7,  8,  ADC_SampleTime_480Cycles);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_8,  9,  ADC_SampleTime_480Cycles);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_9,  10, ADC_SampleTime_480Cycles);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_10, 11, ADC_SampleTime_480Cycles);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_11, 12, ADC_SampleTime_480Cycles);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_12, 13, ADC_SampleTime_480Cycles);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_13, 14, ADC_SampleTime_480Cycles);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_14, 15, ADC_SampleTime_480Cycles);
+  ADC_RegularChannelConfig(ADC1, ADC_Channel_15, 16, ADC_SampleTime_480Cycles);
   
-  ADC_RegularChannelConfig(ADC3, ADC_Channel_4,  1,  ADC_SampleTime_3Cycles);
-  ADC_RegularChannelConfig(ADC3, ADC_Channel_5,  2,  ADC_SampleTime_3Cycles);
-  ADC_RegularChannelConfig(ADC3, ADC_Channel_6,  3,  ADC_SampleTime_3Cycles);
+  ADC_RegularChannelConfig(ADC3, ADC_Channel_4,  1,  ADC_SampleTime_480Cycles);
+  ADC_RegularChannelConfig(ADC3, ADC_Channel_5,  2,  ADC_SampleTime_480Cycles);
+  ADC_RegularChannelConfig(ADC3, ADC_Channel_6,  3,  ADC_SampleTime_480Cycles);
   
   ADC_DMARequestAfterLastTransferCmd(ADC1, ENABLE);
   ADC_DMARequestAfterLastTransferCmd(ADC3, ENABLE);
@@ -378,9 +375,7 @@ void DigitalInit()
   GPIO_Init(GPIOB, &GPIO_InitStruct);
 }
 /**************************************************************************************************
-Настраиваем таймер 7 и 8 для подсчета времени и прерывания ADC соответственно.
-Необходимо обеспечить полное заполнение класса скользящей медианы до применения ее результатов,
-путем изменения времени прерывания для DMA.
+Настраиваем таймер 8 для прерывания ADC.
 **************************************************************************************************/
 void TimerInit()
 {
@@ -552,9 +547,8 @@ extern "C"
   void SysTick_Handler()
   {
     ++time_ms;
-
     ONE_MS = true;
-    SPI3StartSendReceive();//попробовать отправлять из главного цикла программы.
+    SPI3StartSendReceive();
     if(!(time_ms % 10))
       TEN_MS = true;
     if(!(time_ms % 25))
@@ -609,7 +603,6 @@ bool CanTxMailBoxEmpty(CAN_TypeDef* CANx)
   else
     return false;
 }
-
 void Debounce()
 {
   static uint32_t temp    = 0;
@@ -629,15 +622,14 @@ void Debounce()
   ConvertedValue[19] = send >> 16;
   ConvertedValue[20] = send;
 }
-
 void setValve()
 {
   TIM_SetCompare1(TIM2, ReceivedSPIValue[0]);
-  TIM_SetCompare1(TIM3, ReceivedSPIValue[1]);
   TIM_SetCompare2(TIM2, ReceivedSPIValue[2]);
-  TIM_SetCompare2(TIM3, ReceivedSPIValue[3]);
   TIM_SetCompare3(TIM2, ReceivedSPIValue[4]);
-  TIM_SetCompare3(TIM3, ReceivedSPIValue[5]);
   TIM_SetCompare4(TIM2, ReceivedSPIValue[6]);
+  TIM_SetCompare1(TIM3, ReceivedSPIValue[1]);
+  TIM_SetCompare2(TIM3, ReceivedSPIValue[3]);
+  TIM_SetCompare3(TIM3, ReceivedSPIValue[5]);
   TIM_SetCompare4(TIM3, ReceivedSPIValue[7]);
 }
