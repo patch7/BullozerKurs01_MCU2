@@ -89,9 +89,25 @@ void main()
   TIM_PWMInit();
   TimerInit();
   DigitalInit();
+
+  CanTxMsg TxMessage;
+  TxMessage.StdId = 0x002;
+  TxMessage.IDE   = CAN_ID_STD;
+  TxMessage.RTR   = CAN_RTR_DATA;
+  TxMessage.DLC   = 0;
   
   while(true)
   {
+    if(ONE_MS)
+    {
+      static uint8_t count = 0;
+      if(++count == 2)
+      {
+        QueueCanTxMsg.push(TxMessage);
+        count = 0;
+      }
+      ONE_MS = false;
+    }
     if(TEN_MS)
     {
       setValve();
