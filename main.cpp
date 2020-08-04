@@ -61,8 +61,11 @@ void setValve();
 
 void main()
 {
+  __enable_irq();
   MaxAllRccBusConfig();
   FlashInit();
+  
+  NVIC_SetVectorTable(NVIC_VectTab_FLASH, 0x4000);
   
   GPIO_DeInit(GPIOA);//CAN1, ADC2(ch1, ch3 - ch7), TIM1(ch1 - ch3)
   GPIO_DeInit(GPIOB);//ADC2ch8, TIM2ch4, TIM4(ch1 - ch4)

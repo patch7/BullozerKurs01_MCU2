@@ -162,6 +162,9 @@ __vector_table
         DCD     CRYP_IRQHandler                   ; CRYP crypto                                     
         DCD     HASH_RNG_IRQHandler               ; Hash and Rng
         DCD     FPU_IRQHandler                    ; FPU
+
+        DCD     0                         ; Reserved
+        DCD     0                         ; Reserved
     
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
